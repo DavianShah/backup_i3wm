@@ -247,3 +247,4 @@ exec --no-startup-id dunst
 exec --no-startup-id nm-applet
 exec_always --no-startup-id nitrogen --restore
 exec_always --no-startup-id ~/.config/polybar/forest/launch.sh
+exec_always --no-startup-id ~/.config/conky/Mimosa/start.sh

@@ -1,0 +1,74 @@
+Changelog
+------------------------------
+Mimosa Dark - Conky Theme
+[ Leonis Themes Pack ] 
+
+by Closebox73
+
+Social
+X			: https://twitter.com/closebox73
+Discord		: https://discord.com/users/1115644269802311750
+Pling		: https://pling.com/u/closebox73x
+Mastodon	: https://mastodon.social/@closebox73
+------------------------------
+
+v4.0
+Release date : 09 Jul 2025
+-	New weather.sh v4.0
+-	New playerctl script
+-	Change folder name and script path
+-	Some changes in execi command
+-	New rings lua script with rounded option
+-	Change disk usage bar with lua script { also rounded }
+-	Slight theme size changes
+-	Added total data that has been downloaded and uploaded
+-	Drop support for Mpd version, you can still use mpd but need to install mpdris2 so that it can be read in playerctl
+-	Some minor change
+
+
+v3.0
+Release date : 15 Dec 2023
+-	Added line draw_blended in conky config due transparent image issue in Gnome & KDE
+-	Change Background png to match with Calendar version
+-	Change some font 
+-	Some minor change
+
+
+v2.6
+Release date : 14 Jul 2023
+-	New weather-icon-text.sh
+-	Added Argument to ${battery_percent} variable
+-	Added cut command to playerctl variable
+-	Only available in one preset color
+
+
+v2.3
+Release date : 22 Feb 2023
+-	New weather.sh
+-	Added License
+-	Added Changelog file
+-	A few changes to the script
+-	Added Playerctl version
+-	Added Fahrenheit version
+
+
+v1.7
+Release date : 27 Nov 2022
+-	Added 5 preset colors variants
+
+
+v1.5
+Release date : 02 Oct 2022
+-	Added override_utf8_locale line
+-	A few changes to the script
+-	Minimize archive size
+
+
+v1.1
+Release date : 14 Aug 2022
+-	Added Light Version
+
+
+v1.0
+Release date : 30 Jul 2022
+-	Initial release
