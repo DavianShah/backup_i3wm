@@ -23,7 +23,10 @@ font pango:Iosevka Nerd Font 8
 
 # Start XDG autostart .desktop files using dex. See also
 # https://wiki.archlinux.org/index.php/XDG_Autostart
-exec --no-startup-id dex --autostart --environment i3
+# Disabled 2026-10-02: dex launched a second, bare `picom` (system defaults)
+# that raced the rice's `picom --config picom-i3.conf`; needed entries below
+# now use plain exec (ulauncher, blueman-applet).
+#exec --no-startup-id dex --autostart --environment i3
 
 # The combination of xss-lock, nm-applet and pactl is a popular choice, so
 # they are included here as an example. Modify as you see fit.
@@ -245,6 +248,8 @@ exec --no-startup-id picom --config ~/.config/picom/picom-i3.conf
 exec --no-startup-id /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
 exec --no-startup-id dunst
 exec --no-startup-id nm-applet
+exec --no-startup-id env GDK_BACKEND=x11 /usr/bin/ulauncher --hide-window
+exec --no-startup-id blueman-applet
 exec_always --no-startup-id nitrogen --restore
 exec_always --no-startup-id ~/.config/polybar/forest/launch.sh
 exec_always --no-startup-id ~/.config/conky/Mimosa/start.sh
