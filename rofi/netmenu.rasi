@@ -1,12 +1,15 @@
-/* netmenu.rasi - neutral gray glass popup (polybar network module click). */
+/* netmenu.rasi - neutral gray glass popup (polybar network module click).
+   Every widget and state carries explicit colors: rofi's built-in light
+   defaults (white prompt/entry/message boxes) must never surface. */
 
 * {
-    bg:     #2D2D2DC7;   /* rgba(45,45,45,78%) - raised: vivid red wallpaper */
-    bg-top: #FFFFFF10;   /* inputbar: white 6% */
-    sel:    #FFFFFF1C;   /* selected row: white 11% */
-    edge:   #FFFFFF1A;   /* 1px border: white 10% */
+    bg:     #3A3A3AA6;   /* rgba(58,58,58,65%) gray glass over picom blur */
+    sel:    #FFFFFF1F;   /* selected row: white 12% */
+    edge:   #FFFFFF1A;   /* window border: white 10% */
+    line:   #FFFFFF1F;   /* entry underline: white 12% */
     fg:     #E8E8E8;     /* light neutral text */
-    fg-dim: #9A9A9A;     /* header, placeholder */
+    fg-dim: #9A9A9A;     /* header, placeholder, dim rows */
+    state:  #4A4A4A;     /* urgent/active rows: neutral, never white/red */
 
     font: "Iosevka Nerd Font 11";
 }
@@ -28,18 +31,30 @@ window {
 mainbox {
     children: [ inputbar, message, listview ];
     spacing: 8px;
+    padding: 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
     background-color: transparent;
 }
 
 inputbar {
-    children: [ prompt, entry ];
+    children: [ entry ];
     spacing: 6px;
-    padding: 7px 9px;
-    background-color: @bg-top;
-    border-radius: 8px;
+    padding: 6px 2px;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
 }
 
 prompt {
+    background-color: transparent;
+    text-color: @fg-dim;
+}
+
+textbox-prompt-colon {
+    background-color: transparent;
     text-color: @fg-dim;
 }
 
@@ -47,12 +62,33 @@ entry {
     placeholder: "Filter...";
     placeholder-color: @fg-dim;
     text-color: @fg;
+    background-color: transparent;
+    padding: 6px 4px;
+    border: 0px 0px 1px 0px;   /* thin bottom underline only */
+    border-color: @line;
+    border-radius: 0px;
+}
+
+case-indicator {
+    background-color: transparent;
+    text-color: @fg-dim;
 }
 
 message {
-    padding: 4px;
-    text-color: @fg-dim;
+    padding: 4px 6px;
     background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 8px;
+    text-color: @fg-dim;
+}
+
+textbox {
+    background-color: transparent;
+    text-color: @fg-dim;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 8px;
 }
 
 listview {
@@ -61,28 +97,71 @@ listview {
     fixed-height: true;
     spacing: 2px;
     scrollbar: false;
+    padding: 0px;
     background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+}
+
+scrollbar {
+    width: 6px;
+    handle-width: 4px;
+    handle-color: #8A8A8AB3;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+}
+
+mode-switcher {
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    padding: 0px;
+    spacing: 8px;
+}
+
+button {
+    background-color: transparent;
+    text-color: @fg-dim;
+    border: 1px;
+    border-color: transparent;
+    padding: 4px 8px;
+}
+
+button selected {
+    background-color: @sel;
+    text-color: @fg;
 }
 
 element {
     padding: 10px 12px;
+    spacing: 8px;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
     border-radius: 8px;
-    background-color: transparent;
     text-color: @fg;
 }
 
-element normal normal {
-    background-color: transparent;
-    text-color: @fg;
-}
-
-element selected normal {
-    background-color: @sel;
-    text-color: @fg;
-}
+element normal normal    { background-color: transparent; text-color: @fg; }
+element normal urgent    { background-color: transparent; text-color: @fg-dim; }
+element normal active    { background-color: @state;      text-color: @fg; }
+element alternate normal { background-color: transparent; text-color: @fg; }
+element alternate urgent { background-color: transparent; text-color: @fg-dim; }
+element alternate active { background-color: @state;      text-color: @fg; }
+element selected normal  { background-color: @sel;        text-color: @fg; }
+element selected urgent  { background-color: @sel;        text-color: @fg; }
+element selected active  { background-color: @sel;        text-color: @fg; }
 
 element-text {
     background-color: inherit;
     text-color: inherit;
     horizontal-align: 0;
+}
+
+element-icon {
+    background-color: transparent;
+    size: 1.2em;
 }

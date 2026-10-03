@@ -16,6 +16,8 @@ SEP=$'·'              # middle dot used in the header
 DASH=$'\u2500'
 
 ROFI_PROC_RE='rofi.*-window-title netmenu'   # our popup's rofi process pattern
+SUPPRESS_FILE="${XDG_RUNTIME_DIR:-/tmp}/netmenu-$UID.suppress"   # outside-click stamp
+DEBUG_LOG="/tmp/netmenu.log"          # NETMENU_DEBUG=1: main rofi stderr + exit code
 
 # Icons: Iosevka Nerd Font covers these; escapes keep this file pure ASCII.
 IC_LOCK=$'\uf023'
@@ -443,9 +445,89 @@ start_watcher() {
     WATCH_PID=$!
 }
 
+# Raw pointer fallback: a click landing outside the popup geometry closes it.
+PW_PID=""
+
+pointer_outside() {
+    command -v xdotool >/dev/null 2>&1 || return 1
+    command -v xwininfo >/dev/null 2>&1 || return 1
+    local wid X Y AX AY W H
+    wid=$(xdotool search --name 'rofi - netmenu' 2>/dev/null | head -n1)
+    [[ -z $wid ]] && return 0                      # popup already gone
+    eval "$(xdotool getmouselocation --shell 2>/dev/null | grep -E '^[XY]=')"
+    eval "$(xwininfo -id "$wid" 2>/dev/null | awk '
+        /Absolute upper-left X:/{print "AX="$NF}
+        /Absolute upper-left Y:/{print "AY="$NF}
+        /^ *Width:/{print "W="$NF}
+        /^ *Height:/{print "H="$NF}')"
+    [[ -z ${X:-}${Y:-}${AX:-}${AY:-}${W:-}${H:-} ]] && return 1   # unknown: never kill
+    (( X < AX || X >= AX + W || Y < AY || Y >= AY + H )) && return 0
+    return 1
+}
+
+watch_pointer() {
+    local t0 now line
+    t0=$(date +%s%N)
+    while IFS= read -r line; do
+        [[ $line == *RawButtonPress* ]] || continue
+        now=$(date +%s%N)
+        (( now - t0 < 400000000 )) && continue          # ignore first ~0.4s
+        pointer_outside || continue
+        printf '%s' "$(date +%s%N)" > "$SUPPRESS_FILE"  # block instant reopen
+        kill_netmenu
+        break
+    done < <(xinput test-xi2 --root 2>/dev/null)
+}
+
+start_pointer_watcher() {
+    command -v xinput >/dev/null 2>&1 || return 0
+    command -v xdotool >/dev/null 2>&1 || return 0
+    command -v xwininfo >/dev/null 2>&1 || return 0
+    watch_pointer 9>&- &
+    PW_PID=$!
+}
+
+stop_pointer_watcher() {
+    [[ -z ${PW_PID:-} ]] && return 0
+    pkill -TERM -P "$PW_PID" 2>/dev/null
+    kill -TERM "$PW_PID" 2>/dev/null
+    PW_PID=""
+}
+
+# Polybar grabs the pointer while the click is down; rofi started inside that
+# window loses the grab (Esc and click-to-exit die). Poll until buttons are up.
+wait_buttons_released() {
+    local i
+    if ! command -v xinput >/dev/null 2>&1; then
+        sleep 0.4                       # degrade: fixed grace period
+        return 0
+    fi
+    for (( i = 0; i < 75; i++ )); do    # ~1.5s max, 20ms steps
+        xinput query-state 'Virtual core pointer' 2>/dev/null \
+            | grep -qE 'button\[[0-9]+\]=down' || return 0
+        sleep 0.02
+    done
+}
+
+cleanup_all() {
+    stop_watcher
+    stop_pointer_watcher
+}
+
 main() {
     command -v nmcli >/dev/null 2>&1 || { notify "nmcli not available"; exit 1; }
     command -v rofi >/dev/null 2>&1 || { notify "rofi not available"; exit 1; }
+
+    # Outside click stamped a short suppress window; the same click landing on
+    # the polybar label must not reopen the popup.
+    if [[ -f $SUPPRESS_FILE ]]; then
+        local now ts
+        now=$(date +%s%N)
+        ts=$(<"$SUPPRESS_FILE")
+        if [[ $ts =~ ^[0-9]+$ ]] && (( now - ts < 500000000 )); then
+            exit 0
+        fi
+    fi
 
     # Toggle: popup already open -> close it, never stack a second one.
     if pgrep -f "$ROFI_PROC_RE" >/dev/null 2>&1; then
@@ -457,7 +539,7 @@ main() {
     exec 9>"${XDG_RUNTIME_DIR:-/tmp}/netmenu-$UID.lock"
     flock -n 9 2>/dev/null || exit 0
 
-    trap stop_watcher EXIT
+    trap cleanup_all EXIT
 
     WIFI_DEV=$(wifi_dev)
     RADIO=$(nmcli radio wifi 2>/dev/null)
@@ -475,13 +557,21 @@ main() {
     build_header
     build_menu
 
-    start_watcher
-    sleep 0.15                 # polybar may still hold the click; release first
+    wait_buttons_released    # polybar holds the grab while its click is down
+    start_watcher            # i3 focus/workspace fallback
+    start_pointer_watcher    # raw button press outside the popup -> close
     local choice
-    choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
-                 -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
-                 -p "Network" -mesg "$HDR" -format s)
-    [[ -z ${choice:-} ]] && exit 0        # Esc / click outside / focus watcher
+    if [[ ${NETMENU_DEBUG:-0} == 1 ]]; then
+        choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
+                     -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
+                     -mesg "$HDR" -format s 2>>"$DEBUG_LOG")
+        printf '%s main rofi rc=%s\n' "$(date -Is)" "$?" >>"$DEBUG_LOG"
+    else
+        choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
+                     -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
+                     -mesg "$HDR" -format s 2>/dev/null)
+    fi
+    [[ -z ${choice:-} ]] && exit 0    # Esc / click outside / focus+pointer watchers
     dispatch "$choice"
     exit 0
 }
