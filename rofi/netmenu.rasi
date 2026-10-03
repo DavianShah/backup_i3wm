@@ -15,10 +15,7 @@
 }
 
 window {
-    location: north east;
     width: 340px;
-    x-offset: 0px;
-    y-offset: 52px;
 
     padding: 11px;
     background-color: @bg;

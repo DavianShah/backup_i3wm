@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # netmenu.sh - network popup for polybar's network module.
-# Invoked from polybar: %{A1:~/.config/rofi/scripts/netmenu.sh &:} ... %{A}
+# Invoked from polybar: %{A1:setsid -f ~/.config/rofi/scripts/netmenu.sh >/dev/null 2>&1 &:} ... %{A}
 #
 # nmcli is read-only while listing; connect / disconnect / forget only run
 # after an explicit selection. Passwords travel as nmcli argv only: never
@@ -287,6 +287,44 @@ find_profile_for_ssid() {
     return 1
 }
 
+# Compact single-field prompt: one input row, no list, same gray-glass theme.
+# $1 placeholder, $2 -mesg line ("" = none), $3 "password" for masked input.
+# Password mode binds Alt+S (rofi exit code 10) to reveal/hide; the typed text
+# survives the toggle via -filter. Prints the text on Enter; any other exit
+# (Esc, outside click, killed) prints nothing and returns nonzero.
+text_prompt() {
+    local ph=$1 msg=${2:-} mode=${3:-}
+    local rc text="" masked=1 reshow=0
+    local -a cmd
+    [[ $mode == password ]] || masked=0
+    while true; do
+        cmd=(rofi -dmenu -normal-window -window-title "$TITLE" -theme "$THEME"
+             -l 0 -format f -theme-str "listview { lines: 0; }"
+             -theme-str "entry { placeholder: \"$ph\"; }")
+        [[ -n $msg ]] && cmd+=(-mesg "$msg")
+        if [[ $mode == password ]]; then
+            cmd+=(-kb-custom-1 "Alt+s")
+            (( masked )) && cmd+=(-password)
+        fi
+        (( reshow )) && cmd+=(-filter "$text")
+        reshow=0
+        text=$("${cmd[@]}" </dev/null)
+        rc=$?
+        if (( rc == 10 )); then
+            masked=$(( 1 - masked ))
+            reshow=1           # keep the typed text across the toggle
+            continue
+        fi
+        if (( rc == 0 )); then
+            printf '%s' "$text"
+            text=""
+            return 0
+        fi
+        text=""                # cancelled: drop the input, print nothing
+        return 1
+    done
+}
+
 connect_ssid() {
     local ssid=$1 prof sec pw
     prof=$(find_profile_for_ssid "$ssid")
@@ -299,8 +337,9 @@ connect_ssid() {
         run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid"
         return 0
     fi
-    pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
-             -p "Password for $ssid" </dev/null) || return 0
+    pw=$(text_prompt "Password" \
+             "Password for <b>$(pango "$ssid")</b> · Alt+S: show/hide" \
+             password) || return 0
     [[ -z ${pw:-} ]] && return 0               # empty input = cancel
     run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" password "$pw"
     pw=""
@@ -308,12 +347,11 @@ connect_ssid() {
 
 connect_hidden() {
     local ssid pw
-    ssid=$(rofi -dmenu -window-title "$TITLE" -theme "$THEME" \
-                  -p "Network name (SSID)" </dev/null) || return 0
+    ssid=$(text_prompt "Network name (SSID)" "Join a hidden network") || return 0
     [[ -z ${ssid:-} ]] && return 0
-    pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
-                  -mesg "Leave the password empty for an open network" \
-                  -p "Password for $ssid" </dev/null) || return 0
+    pw=$(text_prompt "Password" \
+             "Password for <b>$(pango "$ssid")</b> · leave empty for an open network · Alt+S: show/hide" \
+             password) || return 0
     if [[ -z ${pw:-} ]]; then
         run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" hidden yes
     else
@@ -321,18 +359,15 @@ connect_hidden() {
                   hidden yes password "$pw"
     fi
     pw=""
+    ssid=""
 }
 
 confirm_forget() {
-    local name=$1 choice
-    local back="${IC_BACK} Back"
-    local yes
-    yes="Yes, forget $(pango "$name")"
-    choice=$(printf '%s\n' "$back" "$yes" | rofi -dmenu -i -markup-rows -only-match \
-                 -window-title "$TITLE" -theme "$THEME" -p "Confirm" \
-                 -mesg "Forget saved network <b>$(pango "$name")</b>? Its saved password is removed." \
-                 -format s)
-    [[ $choice == "$yes" ]] || return 0
+    local name=$1
+    # No list: Enter (any input) deletes the profile, Esc cancels.
+    text_prompt "Enter = confirm" \
+        "Forget <b>$(pango "$name")</b>? Enter deletes the profile and its saved password, Esc cancels" \
+        >/dev/null || return 0
     run_nmcli "Forgot $name" nmcli connection delete id "$name"
 }
 
@@ -355,7 +390,7 @@ forget_menu() {
         return 0
     fi
     choice=$(printf '%s\n' "${rows[@]}" | rofi -dmenu -i -markup-rows -only-match \
-                 -window-title "$TITLE" -theme "$THEME" -p "Forget" \
+                 -normal-window -window-title "$TITLE" -theme "$THEME" -p "Forget" \
                  -mesg "Pick a saved network to delete" -format s)
     [[ -z ${choice:-} || $choice == "$back" ]] && return 0
     name=${act[$choice]-}
@@ -413,8 +448,9 @@ dispatch() {
     esac
 }
 
-# Popup lifecycle: click-to-exit needs a pointer grab that polybar's button can
-# steal, so outside-click alone is unreliable; the watcher closes on focus loss.
+# Popup lifecycle: rofi runs -normal-window (no X grabs), so the whole desktop
+# stays live; close via Esc, the focus watcher below, the outside-click pointer
+# watcher, or a toggle click on the polybar label.
 WATCH_PID=""
 
 kill_netmenu() {
@@ -494,8 +530,8 @@ stop_pointer_watcher() {
     PW_PID=""
 }
 
-# Polybar grabs the pointer while the click is down; rofi started inside that
-# window loses the grab (Esc and click-to-exit die). Poll until buttons are up.
+# Polybar is still mid-click when setsid starts us; map only after the button
+# is up so focus and typing land cleanly on the new window.
 wait_buttons_released() {
     local i
     if ! command -v xinput >/dev/null 2>&1; then
@@ -563,12 +599,12 @@ main() {
     local choice
     if [[ ${NETMENU_DEBUG:-0} == 1 ]]; then
         choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
-                     -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
+                     -normal-window -window-title "$TITLE" -theme "$THEME" \
                      -mesg "$HDR" -format s 2>>"$DEBUG_LOG")
         printf '%s main rofi rc=%s\n' "$(date -Is)" "$?" >>"$DEBUG_LOG"
     else
         choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
-                     -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
+                     -normal-window -window-title "$TITLE" -theme "$THEME" \
                      -mesg "$HDR" -format s 2>/dev/null)
     fi
     [[ -z ${choice:-} ]] && exit 0    # Esc / click outside / focus+pointer watchers
