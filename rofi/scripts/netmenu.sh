@@ -1,0 +1,435 @@
+#!/usr/bin/env bash
+# netmenu.sh - network popup for polybar's network module.
+# Invoked from polybar: %{A1:~/.config/rofi/scripts/netmenu.sh &:} ... %{A}
+#
+# nmcli is read-only while listing; connect / disconnect / forget only run
+# after an explicit selection. Passwords travel as nmcli argv only: never
+# logged, never written to disk, never echoed. No terminal is ever opened.
+
+set -u
+
+THEME="${HOME}/.config/rofi/netmenu.rasi"
+TITLE="netmenu"          # rofi -window-title netmenu -> WM_NAME "rofi - netmenu"
+US=$'\x1f'               # sort-key separator (SSIDs may contain spaces/colons)
+RS=$'\x1e'               # separates action name from its argument
+SEP=$'·'              # middle dot used in the header
+DASH=$'\u2500'
+
+# Icons: Iosevka Nerd Font covers these; escapes keep this file pure ASCII.
+IC_LOCK=$'\uf023'
+IC_WIFI=$'\uf1eb'
+IC_RES=$'\uf021'
+IC_OK=$'\u2713'
+IC_OFF=$'\u23fb'
+IC_MENU=$'\u2261'
+IC_X=$'\u00d7'
+BARS=($'\u2581' $'\u2582' $'\u2583' $'\u2584' $'\u2585' $'\u2586' $'\u2587' $'\u2588')
+
+C_RED="#EC7875"
+
+F=()
+WIFI_DEV=""
+RADIO="unknown"
+HDR="Disconnected"
+declare -A AP=()         # SSID -> "active US signal US security"
+declare -A ACT=()        # visible row -> action
+ROWS=()
+
+notify() {
+    command -v notify-send >/dev/null 2>&1 || return 0
+    notify-send -u normal "Network" "$1"
+}
+
+# Escape pango special characters so odd SSIDs cannot break the header/rows.
+pango() {
+    local s=$1 out="" i c
+    for (( i = 0; i < ${#s}; i++ )); do
+        c=${s:i:1}
+        case $c in
+            '&') out+="&amp;" ;;
+            '<') out+="&lt;" ;;
+            '>') out+="&gt;" ;;
+            *)   out+=$c ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+# Split one `nmcli -t` line into F[], unescaping "\:" and "\\" (F is global).
+nm_split() {
+    local line=$1 i c field="" esc=0
+    F=()
+    for (( i = 0; i < ${#line}; i++ )); do
+        c=${line:i:1}
+        if (( esc )); then
+            field+=$c
+            esc=0
+        elif [[ $c == "\\" ]]; then
+            esc=1
+        elif [[ $c == ":" ]]; then
+            F+=("$field")
+            field=""
+        else
+            field+=$c
+        fi
+    done
+    (( esc )) && field+="\\"
+    F+=("$field")
+}
+
+wifi_dev() {
+    local line dev=""
+    while IFS= read -r line; do
+        nm_split "$line"
+        if [[ ${F[1]-} == "wifi" ]]; then
+            dev=${F[0]-}
+            break
+        fi
+    done < <(nmcli -t -f DEVICE,TYPE device status 2>/dev/null)
+    printf '%s' "$dev"
+}
+
+# Fill AP[] from the cached scan (instant: --rescan no), strongest wins per SSID.
+load_aps() {
+    AP=()
+    local line inuse ssid sig sec prev pa ps pp
+    [[ -z $WIFI_DEV ]] && return 0
+    while IFS= read -r line; do
+        nm_split "$line"
+        inuse=${F[0]-}
+        ssid=${F[1]-}
+        sig=${F[2]-}
+        sec=${F[3]-}
+        [[ -z $ssid ]] && continue            # hidden / empty SSID: not listable
+        [[ $sig =~ ^[0-9]+$ ]] || sig=0
+        [[ $inuse == "*" ]] && inuse=1 || inuse=0
+        prev=${AP[$ssid]-}
+        if [[ -z $prev ]]; then
+            AP[$ssid]="$inuse$US$sig$US$sec"
+        else
+            IFS=$US read -r pa ps pp <<< "$prev"
+            (( sig > ps )) && ps=$sig
+            (( inuse > pa )) && pa=$inuse
+            [[ -n $sec ]] && pp=$sec
+            AP[$ssid]="$pa$US$ps$US$pp"
+        fi
+    done < <(nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY device wifi list \
+                 ifname "$WIFI_DEV" --rescan no 2>/dev/null)
+}
+
+# Emit "signal US ssid US active US security" lines, strongest signal first.
+sorted_aps() {
+    local ssid active sig sec
+    for ssid in "${!AP[@]}"; do
+        IFS=$US read -r active sig sec <<< "${AP[$ssid]}"
+        printf '%s\n' "$sig$US$ssid$US$active$US$sec"
+    done | LC_ALL=C sort -t "$US" -k1,1nr
+}
+
+sig_bar() {
+    local i=$(( $1 * 8 / 100 ))
+    (( i > 7 )) && i=7
+    (( i < 0 )) && i=0
+    printf '%s' "${BARS[i]}"
+}
+
+ap_sec() {
+    local e=${AP[$1]-} active sig sec
+    [[ -z $e ]] && return 0
+    IFS=$US read -r active sig sec <<< "$e"
+    printf '%s' "$sec"
+}
+
+# ACTIVE_SSID / ACTIVE_SIG: from the scan when possible, else active profile.
+find_active() {
+    ACTIVE_SSID=""
+    ACTIVE_SIG=""
+    local ssid active sig sec line
+    for ssid in "${!AP[@]}"; do
+        IFS=$US read -r active sig sec <<< "${AP[$ssid]}"
+        if [[ $active == 1 ]]; then
+            ACTIVE_SSID=$ssid
+            ACTIVE_SIG=$sig
+            return 0
+        fi
+    done
+    while IFS= read -r line; do
+        nm_split "$line"
+        if [[ ${F[1]-} == "802-11-wireless" ]]; then
+            ACTIVE_SSID=${F[0]-}
+            return 0
+        fi
+    done < <(nmcli -t -f NAME,TYPE,DEVICE connection show --active 2>/dev/null)
+}
+
+build_header() {
+    local ip
+    if [[ $RADIO != "enabled" ]]; then
+        HDR="<span foreground='${C_RED}'>Wi-Fi off</span>"
+        return 0
+    fi
+    if [[ -z $ACTIVE_SSID ]]; then
+        HDR="Disconnected"
+        return 0
+    fi
+    ip=""
+    if [[ -n $WIFI_DEV ]]; then
+        ip=$(nmcli -g IP4.ADDRESS device show "$WIFI_DEV" 2>/dev/null | head -n1)
+        ip=${ip%%/*}
+    fi
+    HDR="<b>$(pango "$ACTIVE_SSID")</b>"
+    [[ -n $ACTIVE_SIG ]] && HDR+=" ${SEP} ${ACTIVE_SIG}%"
+    HDR+=" ${SEP} ${ip:-no IP}"
+}
+
+type_label() {
+    case $1 in
+        802-3-ethernet) printf 'wired' ;;
+        802-11-wireless) printf 'wi-fi' ;;
+        vpn)            printf 'VPN' ;;
+        wireguard)      printf 'WireGuard' ;;
+        gsm|cdma)       printf 'mobile' ;;
+        *)              printf '%s' "$1" ;;
+    esac
+}
+
+add_row() {
+    ROWS+=("$1")
+    ACT["$1"]=${2:-noop}
+}
+
+build_menu() {
+    ROWS=()
+    ACT=()
+    local line name type dev ssid active sig sec row saved=0 s
+    local -A IN_SCAN=()
+
+    if [[ $RADIO == "enabled" ]]; then
+        add_row "$IC_OFF Wi-Fi on" "toggle${RS}off"
+    else
+        add_row "$IC_OFF Wi-Fi off" "toggle${RS}on"
+    fi
+
+    if [[ $RADIO == "enabled" ]]; then
+        if [[ -n $ACTIVE_SSID ]]; then
+            add_row "$IC_X Disconnect $(pango "$ACTIVE_SSID")" "disconnect"
+        fi
+        add_row "$IC_RES Rescan" "rescan"
+
+        add_row "$DASH$DASH Wi-Fi networks $DASH$DASH" "noop"
+        if (( ${#AP[@]} == 0 )); then
+            add_row "No networks found" "noop"
+        else
+            while IFS=$US read -r sig ssid active sec; do
+                IN_SCAN[$ssid]=1
+                row="$(sig_bar "$sig") "
+                [[ -n $sec ]] && row+="$IC_LOCK"
+                row+=" $(pango "$ssid")"
+                [[ $active == 1 ]] && row+=" $IC_OK"
+                add_row "$row" "net${RS}${ssid}"
+            done < <(sorted_aps)
+        fi
+    fi
+
+    add_row "$DASH$DASH Saved, wired, VPN $DASH$DASH" "noop"
+    while IFS= read -r line; do
+        nm_split "$line"
+        name=${F[0]-}
+        type=${F[1]-}
+        dev=${F[2]-}
+        [[ -z $name ]] && continue
+        [[ $type == "loopback" || $type == "bridge" ]] && continue
+        if [[ $type == "802-11-wireless" ]]; then
+            s=$(nmcli -g 802-11-wireless.ssid connection show id "$name" 2>/dev/null) || s=""
+            [[ -n $s && -n ${IN_SCAN[$s]+x} ]] && continue   # already listed above
+        fi
+        row="$(pango "$name") $SEP $(type_label "$type")"
+        if [[ -n $dev ]]; then
+            add_row "$row (up)" "down${RS}${name}"
+        else
+            add_row "$row (down)" "up${RS}${name}"
+        fi
+        saved=1
+    done < <(nmcli -t -f NAME,TYPE,DEVICE connection show 2>/dev/null)
+    if (( saved == 0 )); then
+        add_row "No saved connections" "noop"
+    fi
+
+    add_row "$IC_WIFI Join hidden network..." "hidden"
+    add_row "$IC_X Forget saved network..." "forget"
+    add_row "$IC_MENU Edit connections..." "edit"
+}
+
+find_profile_for_ssid() {
+    local target=$1 line name ssid
+    while IFS= read -r line; do
+        nm_split "$line"
+        [[ ${F[1]-} == "802-11-wireless" ]] || continue
+        name=${F[0]-}
+        [[ -z $name ]] && continue
+        ssid=$(nmcli -g 802-11-wireless.ssid connection show id "$name" 2>/dev/null) || continue
+        if [[ $ssid == "$target" ]]; then
+            printf '%s' "$name"
+            return 0
+        fi
+    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
+    return 1
+}
+
+connect_ssid() {
+    local ssid=$1 prof sec pw
+    prof=$(find_profile_for_ssid "$ssid")
+    if [[ -n $prof ]]; then
+        run_nmcli "Connecting to $ssid" nmcli connection up id "$prof"
+        return 0
+    fi
+    sec=$(ap_sec "$ssid")
+    if [[ -z $sec ]]; then
+        run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid"
+        return 0
+    fi
+    pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
+             -p "Password for $ssid" </dev/null)
+    [[ -z ${pw:-} ]] && return 0               # Esc / empty = cancel
+    run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" password "$pw"
+    pw=""
+}
+
+connect_hidden() {
+    local ssid pw
+    ssid=$(rofi -dmenu -window-title "$TITLE" -theme "$THEME" \
+                  -p "Network name (SSID)" </dev/null)
+    [[ -z ${ssid:-} ]] && return 0
+    pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
+                  -mesg "Leave the password empty for an open network" \
+                  -p "Password for $ssid" </dev/null)
+    if [[ -z ${pw:-} ]]; then
+        run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" hidden yes
+    else
+        run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" \
+                  hidden yes password "$pw"
+    fi
+    pw=""
+}
+
+confirm_forget() {
+    local name=$1 choice
+    local yes
+    yes="Yes, forget $(pango "$name")"
+    local no="No, keep it"
+    choice=$(printf '%s\n' "$no" "$yes" | rofi -dmenu -i -markup-rows -only-match \
+                 -window-title "$TITLE" -theme "$THEME" -p "Confirm" \
+                 -mesg "Forget saved network <b>$(pango "$name")</b>? Its saved password is removed." \
+                 -format s)
+    [[ $choice == "$yes" ]] || return 0
+    run_nmcli "Forgot $name" nmcli connection delete id "$name"
+}
+
+forget_menu() {
+    local line name choice display
+    local rows=()
+    local -A act=()
+    while IFS= read -r line; do
+        nm_split "$line"
+        [[ ${F[1]-} == "802-11-wireless" ]] || continue
+        name=${F[0]-}
+        [[ -z $name ]] && continue
+        display="$IC_X $(pango "$name")"
+        rows+=("$display")
+        act["$display"]=$name
+    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
+    if (( ${#rows[@]} == 0 )); then
+        notify "No saved Wi-Fi networks"
+        return 0
+    fi
+    choice=$(printf '%s\n' "${rows[@]}" | rofi -dmenu -i -markup-rows -only-match \
+                 -window-title "$TITLE" -theme "$THEME" -p "Forget" \
+                 -mesg "Pick a saved network to delete" -format s)
+    [[ -z ${choice:-} ]] && return 0
+    name=${act[$choice]-}
+    [[ -z $name ]] && return 0
+    confirm_forget "$name"
+}
+
+run_nmcli() {
+    local msg=$1 out rc
+    shift
+    out=$("$@" 2>&1)
+    rc=$?
+    if (( rc == 0 )); then
+        notify "$msg"
+    else
+        notify "Failed: ${out:-nmcli error}"
+    fi
+}
+
+dispatch() {
+    local choice=$1 action arg
+    action=${ACT[$choice]-noop}
+    arg=${action#*"$RS"}
+    action=${action%%"$RS"*}
+    case $action in
+        noop) ;;
+        toggle)
+            if [[ $arg == on ]]; then
+                run_nmcli "Wi-Fi enabled" nmcli radio wifi on
+            else
+                run_nmcli "Wi-Fi disabled" nmcli radio wifi off
+            fi
+            ;;
+        rescan)
+            if [[ -n $WIFI_DEV ]]; then
+                nmcli device wifi rescan ifname "$WIFI_DEV" >/dev/null 2>&1
+                sleep 1
+                notify "Wi-Fi networks rescanned"
+            else
+                notify "No Wi-Fi device"
+            fi
+            ;;
+        net)      connect_ssid "$arg" ;;
+        hidden)   connect_hidden ;;
+        disconnect)
+            if [[ -n $WIFI_DEV ]]; then
+                run_nmcli "Disconnected" nmcli device disconnect "$WIFI_DEV"
+            fi
+            ;;
+        up)       run_nmcli "Activating $arg" nmcli connection up id "$arg" ;;
+        down)      run_nmcli "Deactivating $arg" nmcli connection down id "$arg" ;;
+        forget)    forget_menu ;;
+        edit)      nm-connection-editor >/dev/null 2>&1 & ;;
+        *) ;;
+    esac
+}
+
+main() {
+    command -v nmcli >/dev/null 2>&1 || { notify "nmcli not available"; exit 1; }
+    command -v rofi >/dev/null 2>&1 || { notify "rofi not available"; exit 1; }
+
+    WIFI_DEV=$(wifi_dev)
+    RADIO=$(nmcli radio wifi 2>/dev/null)
+    [[ -z $RADIO ]] && RADIO="unknown"
+
+    load_aps
+    find_active
+
+    # one background refresh so the next open sees fresh results
+    if [[ -n $WIFI_DEV && $RADIO == "enabled" ]]; then
+        nmcli device wifi rescan ifname "$WIFI_DEV" >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+    fi
+
+    build_header
+    build_menu
+
+    local choice
+    choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
+                 -window-title "$TITLE" -theme "$THEME" -p "Network" \
+                 -mesg "$HDR" -format s)
+    [[ -z ${choice:-} ]] && exit 0        # Esc or click outside
+    dispatch "$choice"
+    exit 0
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@"
+fi
