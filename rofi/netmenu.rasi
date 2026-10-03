@@ -1,13 +1,12 @@
-/* netmenu.rasi - custom network popup (polybar network module click). */
+/* netmenu.rasi - neutral gray glass popup (polybar network module click). */
 
 * {
-    bg:        #212B30dd;
-    bg-alt:    #3F536044;
-    fg:        #C4C7C5;
-    accent:    #6C77BB;
-    accent-fg: #FFFFFF;
-    muted:     #9E9E9E;
-    ok:        #61C766;
+    bg:     #2D2D2DC7;   /* rgba(45,45,45,78%) - raised: vivid red wallpaper */
+    bg-top: #FFFFFF10;   /* inputbar: white 6% */
+    sel:    #FFFFFF1C;   /* selected row: white 11% */
+    edge:   #FFFFFF1A;   /* 1px border: white 10% */
+    fg:     #E8E8E8;     /* light neutral text */
+    fg-dim: #9A9A9A;     /* header, placeholder */
 
     font: "Iosevka Nerd Font 11";
 }
@@ -18,10 +17,10 @@ window {
     x-offset: 0px;
     y-offset: 52px;
 
-    padding: 10px;
+    padding: 11px;
     background-color: @bg;
     border: 1px;
-    border-color: @accent;
+    border-color: @edge;
     border-radius: 14px;
     font: @font;
 }
@@ -35,38 +34,38 @@ mainbox {
 inputbar {
     children: [ prompt, entry ];
     spacing: 6px;
-    padding: 6px;
-    background-color: @bg-alt;
+    padding: 7px 9px;
+    background-color: @bg-top;
     border-radius: 8px;
 }
 
 prompt {
-    text-color: @accent;
+    text-color: @fg-dim;
 }
 
 entry {
     placeholder: "Filter...";
-    placeholder-color: @muted;
+    placeholder-color: @fg-dim;
     text-color: @fg;
 }
 
 message {
     padding: 4px;
-    text-color: @muted;
+    text-color: @fg-dim;
     background-color: transparent;
 }
 
 listview {
-    lines: 12;
+    lines: 8;
     columns: 1;
-    fixed-height: false;
+    fixed-height: true;
     spacing: 2px;
-    scrollbar: true;
+    scrollbar: false;
     background-color: transparent;
 }
 
 element {
-    padding: 6px;
+    padding: 10px 12px;
     border-radius: 8px;
     background-color: transparent;
     text-color: @fg;
@@ -78,8 +77,8 @@ element normal normal {
 }
 
 element selected normal {
-    background-color: @accent;
-    text-color: @accent-fg;
+    background-color: @sel;
+    text-color: @fg;
 }
 
 element-text {

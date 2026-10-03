@@ -15,6 +15,8 @@ RS=$'\x1e'               # separates action name from its argument
 SEP=$'·'              # middle dot used in the header
 DASH=$'\u2500'
 
+ROFI_PROC_RE='rofi.*-window-title netmenu'   # our popup's rofi process pattern
+
 # Icons: Iosevka Nerd Font covers these; escapes keep this file pure ASCII.
 IC_LOCK=$'\uf023'
 IC_WIFI=$'\uf1eb'
@@ -23,9 +25,11 @@ IC_OK=$'\u2713'
 IC_OFF=$'\u23fb'
 IC_MENU=$'\u2261'
 IC_X=$'\u00d7'
+IC_BACK=$'\xe2\x86\x90'
 BARS=($'\u2581' $'\u2582' $'\u2583' $'\u2584' $'\u2585' $'\u2586' $'\u2587' $'\u2588')
 
-C_RED="#EC7875"
+C_OFF="#B5B5B5"           # "Wi-Fi off" header - neutral, no accent
+DIM_C="#8A8A8A"           # section separator rows
 
 F=()
 WIFI_DEV=""
@@ -165,7 +169,7 @@ find_active() {
 build_header() {
     local ip
     if [[ $RADIO != "enabled" ]]; then
-        HDR="<span foreground='${C_RED}'>Wi-Fi off</span>"
+        HDR="<span foreground='${C_OFF}'>Wi-Fi off</span>"
         return 0
     fi
     if [[ -z $ACTIVE_SSID ]]; then
@@ -198,6 +202,11 @@ add_row() {
     ACT["$1"]=${2:-noop}
 }
 
+# Section dividers: dim gray so they read as structure, not selectable content.
+dim_row() {
+    printf '<span foreground="%s">%s</span>' "$DIM_C" "$1"
+}
+
 build_menu() {
     ROWS=()
     ACT=()
@@ -216,7 +225,7 @@ build_menu() {
         fi
         add_row "$IC_RES Rescan" "rescan"
 
-        add_row "$DASH$DASH Wi-Fi networks $DASH$DASH" "noop"
+        add_row "$(dim_row "$DASH$DASH Wi-Fi networks $DASH$DASH")" "noop"
         if (( ${#AP[@]} == 0 )); then
             add_row "No networks found" "noop"
         else
@@ -231,7 +240,7 @@ build_menu() {
         fi
     fi
 
-    add_row "$DASH$DASH Saved, wired, VPN $DASH$DASH" "noop"
+    add_row "$(dim_row "$DASH$DASH Saved, wired, VPN $DASH$DASH")" "noop"
     while IFS= read -r line; do
         nm_split "$line"
         name=${F[0]-}
@@ -289,8 +298,8 @@ connect_ssid() {
         return 0
     fi
     pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
-             -p "Password for $ssid" </dev/null)
-    [[ -z ${pw:-} ]] && return 0               # Esc / empty = cancel
+             -p "Password for $ssid" </dev/null) || return 0
+    [[ -z ${pw:-} ]] && return 0               # empty input = cancel
     run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" password "$pw"
     pw=""
 }
@@ -298,11 +307,11 @@ connect_ssid() {
 connect_hidden() {
     local ssid pw
     ssid=$(rofi -dmenu -window-title "$TITLE" -theme "$THEME" \
-                  -p "Network name (SSID)" </dev/null)
+                  -p "Network name (SSID)" </dev/null) || return 0
     [[ -z ${ssid:-} ]] && return 0
     pw=$(rofi -dmenu -password -window-title "$TITLE" -theme "$THEME" \
                   -mesg "Leave the password empty for an open network" \
-                  -p "Password for $ssid" </dev/null)
+                  -p "Password for $ssid" </dev/null) || return 0
     if [[ -z ${pw:-} ]]; then
         run_nmcli "Connecting to $ssid" nmcli device wifi connect "$ssid" hidden yes
     else
@@ -314,10 +323,10 @@ connect_hidden() {
 
 confirm_forget() {
     local name=$1 choice
+    local back="${IC_BACK} Back"
     local yes
     yes="Yes, forget $(pango "$name")"
-    local no="No, keep it"
-    choice=$(printf '%s\n' "$no" "$yes" | rofi -dmenu -i -markup-rows -only-match \
+    choice=$(printf '%s\n' "$back" "$yes" | rofi -dmenu -i -markup-rows -only-match \
                  -window-title "$TITLE" -theme "$THEME" -p "Confirm" \
                  -mesg "Forget saved network <b>$(pango "$name")</b>? Its saved password is removed." \
                  -format s)
@@ -327,7 +336,8 @@ confirm_forget() {
 
 forget_menu() {
     local line name choice display
-    local rows=()
+    local back="${IC_BACK} Back"
+    local rows=("$back")
     local -A act=()
     while IFS= read -r line; do
         nm_split "$line"
@@ -338,14 +348,14 @@ forget_menu() {
         rows+=("$display")
         act["$display"]=$name
     done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
-    if (( ${#rows[@]} == 0 )); then
+    if (( ${#rows[@]} == 1 )); then
         notify "No saved Wi-Fi networks"
         return 0
     fi
     choice=$(printf '%s\n' "${rows[@]}" | rofi -dmenu -i -markup-rows -only-match \
                  -window-title "$TITLE" -theme "$THEME" -p "Forget" \
                  -mesg "Pick a saved network to delete" -format s)
-    [[ -z ${choice:-} ]] && return 0
+    [[ -z ${choice:-} || $choice == "$back" ]] && return 0
     name=${act[$choice]-}
     [[ -z $name ]] && return 0
     confirm_forget "$name"
@@ -401,9 +411,53 @@ dispatch() {
     esac
 }
 
+# Popup lifecycle: click-to-exit needs a pointer grab that polybar's button can
+# steal, so outside-click alone is unreliable; the watcher closes on focus loss.
+WATCH_PID=""
+
+kill_netmenu() {
+    pkill -TERM -f "$ROFI_PROC_RE" 2>/dev/null
+}
+
+stop_watcher() {
+    [[ -z ${WATCH_PID:-} ]] && return 0
+    pkill -TERM -P "$WATCH_PID" 2>/dev/null
+    kill -TERM "$WATCH_PID" 2>/dev/null
+    WATCH_PID=""
+}
+
+watch_events() {
+    sleep 0.6                        # let rofi map and focus first
+    local ev
+    while IFS= read -r ev; do
+        [[ $ev == *'rofi - netmenu'* ]] && continue   # events about our popup
+        [[ $ev == *'"change":"focus"'* ]] || continue # focus only, not new/title
+        kill_netmenu
+        break
+    done < <(i3-msg -t subscribe -m '["window","workspace"]' 2>/dev/null)
+}
+
+start_watcher() {
+    command -v i3-msg >/dev/null 2>&1 || return 0
+    watch_events 9>&- &
+    WATCH_PID=$!
+}
+
 main() {
     command -v nmcli >/dev/null 2>&1 || { notify "nmcli not available"; exit 1; }
     command -v rofi >/dev/null 2>&1 || { notify "rofi not available"; exit 1; }
+
+    # Toggle: popup already open -> close it, never stack a second one.
+    if pgrep -f "$ROFI_PROC_RE" >/dev/null 2>&1; then
+        kill_netmenu
+        exit 0
+    fi
+
+    # Single instance: fd 9 closes (lock released) the moment this script exits.
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/netmenu-$UID.lock"
+    flock -n 9 2>/dev/null || exit 0
+
+    trap stop_watcher EXIT
 
     WIFI_DEV=$(wifi_dev)
     RADIO=$(nmcli radio wifi 2>/dev/null)
@@ -414,18 +468,20 @@ main() {
 
     # one background refresh so the next open sees fresh results
     if [[ -n $WIFI_DEV && $RADIO == "enabled" ]]; then
-        nmcli device wifi rescan ifname "$WIFI_DEV" >/dev/null 2>&1 &
+        nmcli device wifi rescan ifname "$WIFI_DEV" >/dev/null 2>&1 9>&- &
         disown 2>/dev/null || true
     fi
 
     build_header
     build_menu
 
+    start_watcher
+    sleep 0.15                 # polybar may still hold the click; release first
     local choice
     choice=$(printf '%s\n' "${ROWS[@]}" | rofi -dmenu -i -markup-rows -only-match \
-                 -window-title "$TITLE" -theme "$THEME" -p "Network" \
-                 -mesg "$HDR" -format s)
-    [[ -z ${choice:-} ]] && exit 0        # Esc or click outside
+                 -window-title "$TITLE" -theme "$THEME" -click-to-exit true \
+                 -p "Network" -mesg "$HDR" -format s)
+    [[ -z ${choice:-} ]] && exit 0        # Esc / click outside / focus watcher
     dispatch "$choice"
     exit 0
 }
