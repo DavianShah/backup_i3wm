@@ -1,0 +1,238 @@
+/* launcher.rasi - rofi drun launcher ($mod+d), i3 session only.
+ *
+ * Reference look: 1000px centered glass panel, 1px peach border, wallpaper
+ * strip header, peach pill search + mode buttons, 2x8 list.
+ *
+ * Geometry (Xft.dpi 144 -> 10pt = 20px, text line ~26px):
+ *   window 1000 - 2x1 border - 2x12 padding        = 974px content
+ *   header  = 2x76 padding + 48 entry              = 200px  -> images/header.png
+ *             MUST be exactly 974x200, scale "none", corners baked (r=18).
+ *   element = 26 text + 2x10 padding               = 46px, +6 spacing = 52 pitch
+ *   listview = 8x46 + 7x6 + 2 border               = 412px
+ *   window height ~= 2 + 24 + 200 + 12 + 412 + 2   = 652px
+ *
+ * Every widget and state carries an explicit color so rofi's built-in light
+ * defaults (white entry/prompt/message boxes) can never surface.
+ */
+
+* {
+    win-bg:   #1E1612A6;   /* dark brown 65% - picom blur shows through     */
+    win-fall: #1E1612E6;   /* fallback under the header strip corners        */
+    edge:     #C9967E;     /* window / button border                        */
+    peach:    #D49C80;     /* accent, selected row                          */
+    fg:       #E6D3C8;     /* list + message text                           */
+    fg-dim:   #B49E90;     /* prompt, case indicator                        */
+    ink:      #241A15;     /* text on peach                                 */
+    ink-dim:  #5A4034;     /* placeholder on the peach pill                 */
+    pill:     #D49C80A6;   /* peach 65% - search pill                       */
+    btn:      #D49C8099;   /* peach 60% - mode buttons                      */
+    btn-sel:  #D49C80D9;   /* peach 85% - active mode button                */
+    urgent:   #E8836B;     /* urgent row text                               */
+    active:   #D49C8033;   /* peach 20% - active (focused) row              */
+
+    font: "Iosevka Nerd Font 10";
+}
+
+configuration {
+    show-icons: true;
+    icon-theme: "Papirus-Dark";
+
+    display-drun: "Apps";
+    display-filebrowser: "Files";
+    display-run: "Run";
+    display-window: "Windows";
+    display-calc: "Calc";
+}
+
+window {
+    width: 1000px;
+    location: center;
+    anchor: center;
+
+    padding: 12px;
+    border: 1px;
+    border-color: @edge;
+    border-radius: 20px;
+    background-color: @win-bg;
+    font: @font;
+}
+
+mainbox {
+    children: [ header, listview ];
+    spacing: 12px;
+    padding: 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    background-color: transparent;
+}
+
+/* wallpaper strip: pill on the left, mode buttons on the right */
+header {
+    orientation: horizontal;
+    spacing: 16px;
+    padding: 76px 64px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 18px;
+    background-color: @win-fall;
+    background-image: url("/home/davi/backup_i3wm/rofi/images/header.png", none);
+}
+
+inputbar {
+    orientation: horizontal;
+    expand: true;
+    children: [ entry ];
+    spacing: 8px;
+    padding: 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    background-color: transparent;
+}
+
+prompt {
+    content: "";
+    text-color: @fg-dim;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    padding: 0px;
+}
+
+textbox-prompt-colon {
+    text-color: @fg-dim;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    padding: 0px;
+}
+
+entry {
+    placeholder: " Search";
+    placeholder-color: @ink-dim;
+    text-color: @ink;
+    background-color: @pill;
+
+    expand: false;
+    width: 340px;
+    padding: 10px 16px;
+    border: 0px;
+    border-color: transparent;
+    border-radius: 24px;
+}
+
+case-indicator {
+    text-color: @fg-dim;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    padding: 0px;
+}
+
+mode-switcher {
+    orientation: horizontal;
+    expand: false;
+    spacing: 6px;
+    padding: 6px 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    background-color: transparent;
+}
+
+button {
+    font: "Iosevka Nerd Font 9";
+    expand: false;
+    padding: 5px 18px;
+    border: 1px;
+    border-color: @edge;
+    border-radius: 10px;
+    background-color: @btn;
+    text-color: @ink;
+}
+
+button selected {
+    background-color: @btn-sel;
+    text-color: @ink;
+    border-color: @peach;
+}
+
+message {
+    padding: 8px 12px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 8px;
+    background-color: #1E1612CC;
+    text-color: @fg;
+    expand: false;
+}
+
+textbox {
+    text-color: @fg;
+    background-color: transparent;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 6px;
+    padding: 0px;
+}
+
+listview {
+    lines: 8;
+    columns: 2;
+    fixed-height: true;
+    spacing: 6px;
+    scrollbar: false;
+    padding: 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    background-color: transparent;
+}
+
+scrollbar {
+    width: 6px;
+    handle-width: 4px;
+    handle-color: #D49C8099;
+    padding: 0px;
+    border: 1px;
+    border-color: transparent;
+    border-radius: 0px;
+    background-color: transparent;
+}
+
+element {
+    orientation: horizontal;
+    spacing: 8px;
+    padding: 10px 12px;
+    border: 0px;
+    border-color: transparent;
+    border-radius: 6px;
+    background-color: transparent;
+    text-color: @fg;
+}
+
+element normal normal    { background-color: transparent; text-color: @fg; }
+element normal urgent    { background-color: transparent; text-color: @urgent; }
+element normal active    { background-color: @active;     text-color: @fg; }
+element alternate normal { background-color: transparent; text-color: @fg; }
+element alternate urgent { background-color: transparent; text-color: @urgent; }
+element alternate active { background-color: @active;     text-color: @fg; }
+element selected normal  { background-color: @peach;      text-color: @ink; }
+element selected urgent  { background-color: @urgent;     text-color: @ink; }
+element selected active  { background-color: #C48A70;     text-color: @ink; }
+
+element-text {
+    background-color: inherit;
+    text-color: inherit;
+    horizontal-align: 0;
+}
+
+element-icon {
+    background-color: transparent;
+    text-color: @fg;
+    size: 22px;
+}
