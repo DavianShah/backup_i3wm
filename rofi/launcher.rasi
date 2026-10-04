@@ -3,21 +3,26 @@
  * Reference look: 1000px centered glass panel, 1px peach border, wallpaper
  * strip header, peach pill search + mode buttons, 2x8 list.
  *
- * Geometry (Xft.dpi 144 -> 10pt = 20px, text line ~26px):
- *   window 1000 - 2x1 border - 2x12 padding        = 974px content
- *   header  = 2x76 padding + 48 entry              = 200px  -> images/header.png
- *             MUST be exactly 974x200, scale "none", corners baked (r=18).
- *   element = 26 text + 2x10 padding               = 46px, +6 spacing = 52 pitch
- *   listview = 8x46 + 7x6 + 2 border               = 412px
- *   window height ~= 2 + 24 + 200 + 12 + 412 + 2   = 652px
+ * Geometry (auto dpi ~96: 10pt -> 17px line, 9pt -> 16px line; measured
+ * under Xvfb, confirmed by scripts/make-header.sh):
+ *   entry      = 17 line + 2x10 padding              = 37px
+ *   inputbar   = entry + 2x1 border                  = 39px
+ *   button     = 16 line + 2x5 padding + 2x1 border  = 28px
+ *   mode-switcher = button + 2x6 padding + 2x1       = 42px
+ *   header     = 42 + 2x76 padding + 2x1 border      = 196px -> 972x196 box
+ *                image = scripts/make-header.sh (scale "none", r=18 corners
+ *                baked, wallpaper crop at screen 474,306 + HEADER_DX/DY)
+ *   element    = 22 icon + 2x10 padding              = 42px, +6 spacing = 48 pitch
+ *   listview   = 2 border + 8x42 + 7x6               = 380px
+ *   window h   ~= 2 + 24 + 196 + 12 + 380 + 2        = 616px
  *
  * Every widget and state carries an explicit color so rofi's built-in light
  * defaults (white entry/prompt/message boxes) can never surface.
  */
 
 * {
-    win-bg:   #1E1612A6;   /* dark brown 65% - picom blur shows through     */
-    win-fall: #1E1612E6;   /* fallback under the header strip corners        */
+    win-bg:   #1A1A1A94;   /* neutral dark gray 58% - picom blur shows through */
+    win-fall: #1A1A1A94;   /* fallback under the header strip corners        */
     edge:     #C9967E;     /* window / button border                        */
     peach:    #D49C80;     /* accent, selected row                          */
     fg:       #E6D3C8;     /* list + message text                           */
@@ -69,6 +74,8 @@ mainbox {
 
 /* wallpaper strip: pill on the left, mode buttons on the right */
 header {
+    children: [ inputbar, mode-switcher ];
+    expand: false;
     orientation: horizontal;
     spacing: 16px;
     padding: 76px 64px;
@@ -76,7 +83,7 @@ header {
     border-color: transparent;
     border-radius: 18px;
     background-color: @win-fall;
-    background-image: url("/home/davi/backup_i3wm/rofi/images/header.png", none);
+    background-image: url("/home/davi/.cache/rofi-launcher/header.png", none);
 }
 
 inputbar {
@@ -111,7 +118,7 @@ textbox-prompt-colon {
 }
 
 entry {
-    placeholder: " Search";
+    placeholder: "  Search";
     placeholder-color: @ink-dim;
     text-color: @ink;
     background-color: @pill;
@@ -166,7 +173,7 @@ message {
     border: 1px;
     border-color: transparent;
     border-radius: 8px;
-    background-color: #1E1612CC;
+    background-color: #1A1A1A94;
     text-color: @fg;
     expand: false;
 }
