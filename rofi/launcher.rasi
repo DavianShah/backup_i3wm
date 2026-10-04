@@ -30,9 +30,9 @@
     fg-dim:   #9A9A9A;     /* prompt, case indicator                         */
     ink:      #F0F0F0;     /* text on glass (buttons, selected rows)         */
     ink-dim:  #9A9A9A;     /* placeholder on the search pill                 */
-    pill:     #FFFFFF1A;   /* white 10% - search pill                        */
-    btn:      #FFFFFF1A;   /* white 10% - mode buttons                       */
-    btn-sel:  #FFFFFF33;   /* white 20% - active mode button                 */
+    pill:     #1A1A1ACC;   /* dark glass 80% - search pill (hides wallpaper) */
+    btn:      #1A1A1ACC;   /* dark glass 80% - mode buttons                  */
+    btn-sel:  #5A5A5AED;   /* mid gray 93% - active mode button              */
     urgent:   #C9C9C9;     /* urgent row text, neutral gray                  */
     active:   #FFFFFF21;   /* white 13% - active (focused) row               */
 
