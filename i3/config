@@ -232,8 +232,8 @@ for_window [class=".*"] border none
 
 # netmenu popup (rofi -normal-window): floating, undecorated, pinned under the bar.
 # Single monitor (eDP 1920x1200): x = 1920 - 340 (rasi width) - 0 (bar side margin) = 1580.
-# y = 6 (bar offset-y) + 46 (polybar height 40 + top/bottom border 3+3) + 8 gap = 60.
-for_window [title="^rofi - netmenu$"] floating enable, border none, move position 1580 px 60 px
+# y = 40 (polybar window height, border 0) + 14 gap = 54. Reserved height 46 -> 40.
+for_window [title="^rofi - netmenu$"] floating enable, border none, move position 1580 px 54 px
 
 # gaps (jarak antar window + tepi layar)
 gaps inner 5
