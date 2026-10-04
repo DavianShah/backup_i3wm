@@ -70,7 +70,7 @@ bindsym $mod+Return exec alacritty
 bindsym $mod+Shift+q kill
 
 # start dmenu (a program launcher)
-bindsym $mod+d exec rofi -show drun -modes "drun,filebrowser,run,window,calc:/home/davi/.config/rofi/scripts/calc.sh" -theme ~/.config/rofi/launcher.rasi -window-title launcher
+bindsym $mod+d exec --no-startup-id ~/.config/rofi/scripts/launcher.sh
 # A more modern dmenu replacement is rofi:
 # bindcode $mod+40 exec "rofi -modi drun,run -show drun"
 # There also is i3-dmenu-desktop which only displays applications shipping a
@@ -89,17 +89,17 @@ bindsym $mod+Down focus down
 bindsym $mod+Up focus up
 bindsym $mod+Right focus right
 
-# move focused window
-bindsym $mod+Shift+j move left
-bindsym $mod+Shift+k move down
-bindsym $mod+Shift+l move up
-bindsym $mod+Shift+semicolon move right
+# move focused window (forwarded to i3l so spiral layout stays consistent)
+bindsym $mod+Shift+j exec i3l move left
+bindsym $mod+Shift+k exec i3l move down
+bindsym $mod+Shift+l exec i3l move up
+bindsym $mod+Shift+semicolon exec i3l move right
 
 # alternatively, you can use the cursor keys:
-bindsym $mod+Shift+Left move left
-bindsym $mod+Shift+Down move down
-bindsym $mod+Shift+Up move up
-bindsym $mod+Shift+Right move right
+bindsym $mod+Shift+Left exec i3l move left
+bindsym $mod+Shift+Down exec i3l move down
+bindsym $mod+Shift+Up exec i3l move up
+bindsym $mod+Shift+Right exec i3l move right
 
 # split in horizontal orientation
 bindsym $mod+h split h
@@ -258,3 +258,28 @@ exec --no-startup-id blueman-applet
 exec_always --no-startup-id nitrogen --restore
 exec_always --no-startup-id ~/.config/polybar/forest/launch.sh
 exec_always --no-startup-id ~/.config/conky/Mimosa/start.sh
+
+
+# ==========================================
+# KONFIGURASI I3-LAYOUTS (FIXED)
+# ==========================================
+exec_always --no-startup-id i3-layouts
+# spiral layout on every workspace
+set $i3l spiral to workspace 1
+set $i3l spiral to workspace 2
+set $i3l spiral to workspace 3
+set $i3l spiral to workspace 4
+set $i3l spiral to workspace 5
+set $i3l spiral to workspace 6
+set $i3l spiral to workspace 7
+set $i3l spiral to workspace 8
+set $i3l spiral to workspace 9
+set $i3l spiral to workspace 10
+# switch current workspace to spiral
+bindsym $mod+Shift+y exec i3l spiral
+bindsym $mod+Shift+u exec i3l stop
+# ==========================================
+
+# no sleep / no screen blank in i3 (XFCE untouched)
+exec_always --no-startup-id xset s off -dpms
+exec --no-startup-id systemd-inhibit --what=sleep:handle-lid-switch --who=i3 --why="no sleep in i3" sleep infinity
