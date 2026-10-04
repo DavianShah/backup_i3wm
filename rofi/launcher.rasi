@@ -47,7 +47,6 @@ configuration {
     display-filebrowser: "Files";
     display-run: "Run";
     display-window: "Windows";
-    display-calc: "Calc";
 }
 
 window {
