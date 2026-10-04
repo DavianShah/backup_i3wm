@@ -1,7 +1,8 @@
 /* launcher.rasi - rofi drun launcher ($mod+d), i3 session only.
  *
- * Reference look: 1000px centered glass panel, 1px peach border, wallpaper
- * strip header, peach pill search + mode buttons, 2x8 list.
+ * Reference look: 1000px centered glass panel, 1px white border, wallpaper
+ * strip header, white-glass pill search + mode buttons, 2x8 list.
+ * Neutral palette only: white/gray + alpha over picom blur (no warm hues).
  *
  * Geometry (auto dpi ~96: 10pt -> 17px line, 9pt -> 16px line; measured
  * under Xvfb, confirmed by scripts/make-header.sh):
@@ -23,17 +24,17 @@
 * {
     win-bg:   #1A1A1A94;   /* neutral dark gray 58% - picom blur shows through */
     win-fall: #1A1A1A94;   /* fallback under the header strip corners        */
-    edge:     #C9967E;     /* window / button border                        */
-    peach:    #D49C80;     /* accent, selected row                          */
-    fg:       #E6D3C8;     /* list + message text                           */
-    fg-dim:   #B49E90;     /* prompt, case indicator                        */
-    ink:      #241A15;     /* text on peach                                 */
-    ink-dim:  #5A4034;     /* placeholder on the peach pill                 */
-    pill:     #D49C80A6;   /* peach 65% - search pill                       */
-    btn:      #D49C8099;   /* peach 60% - mode buttons                      */
-    btn-sel:  #D49C80D9;   /* peach 85% - active mode button                */
-    urgent:   #E8836B;     /* urgent row text                               */
-    active:   #D49C8033;   /* peach 20% - active (focused) row              */
+    edge:     #FFFFFF21;   /* window / button border, white 13%              */
+    peach:    #FFFFFF2E;   /* selected-row glass, white 18% (name kept)      */
+    fg:       #E6E6E6;     /* list + message text                            */
+    fg-dim:   #9A9A9A;     /* prompt, case indicator                         */
+    ink:      #F0F0F0;     /* text on glass (buttons, selected rows)         */
+    ink-dim:  #9A9A9A;     /* placeholder on the search pill                 */
+    pill:     #FFFFFF1A;   /* white 10% - search pill                        */
+    btn:      #FFFFFF1A;   /* white 10% - mode buttons                       */
+    btn-sel:  #FFFFFF33;   /* white 20% - active mode button                 */
+    urgent:   #C9C9C9;     /* urgent row text, neutral gray                  */
+    active:   #FFFFFF21;   /* white 13% - active (focused) row               */
 
     font: "Iosevka Nerd Font 10";
 }
@@ -203,7 +204,7 @@ listview {
 scrollbar {
     width: 6px;
     handle-width: 4px;
-    handle-color: #D49C8099;
+    handle-color: #FFFFFF59;
     padding: 0px;
     border: 1px;
     border-color: transparent;
@@ -229,8 +230,8 @@ element alternate normal { background-color: transparent; text-color: @fg; }
 element alternate urgent { background-color: transparent; text-color: @urgent; }
 element alternate active { background-color: @active;     text-color: @fg; }
 element selected normal  { background-color: @peach;      text-color: @ink; }
-element selected urgent  { background-color: @urgent;     text-color: @ink; }
-element selected active  { background-color: #C48A70;     text-color: @ink; }
+element selected urgent  { background-color: #FFFFFF2E;    text-color: @urgent; }
+element selected active  { background-color: #FFFFFF33;     text-color: @ink; }
 
 element-text {
     background-color: inherit;
