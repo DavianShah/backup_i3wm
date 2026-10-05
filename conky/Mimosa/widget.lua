@@ -198,6 +198,7 @@ end
 local ICONS = {
   cpu  = utf8.char(0xF2DB),
   bat  = utf8.char(0xF240),
+  bat_charging = utf8.char(0xF0084), -- 󰂄
   temp = utf8.char(0xF2C9),
   ram  = utf8.char(0xEFC5), -- fa-memory (f538 missing from this Nerd Font build)
   wifi = utf8.char(0xF1EB),
@@ -217,6 +218,9 @@ local function draw(cr)
   local vcpu  = math.min(Pnum('${cpu}') or 0, 100)
   local vstor = math.min(Pnum('${fs_used_perc /}') or 0, 100)
   local vbat  = Pnum('${battery_percent BAT0}')
+  local charging = false
+  local sf = io.open('/sys/class/power_supply/BAT0/status', 'r')
+  if sf then charging = sf:read('*l') == 'Charging'; sf:close() end
   local vram   = Pnum('${memperc}') or 0
   local vtemp = Pnum('${acpitemp}')
   local fsu   = P('${fs_used /}')
@@ -280,7 +284,7 @@ local function draw(cr)
   local gauges = {
     { icon = ICONS.cpu,  lbl = 'CPU',   val = vcpu,  txt = string.format('%d%%', vcpu) },
     { icon = ICONS.ram,  lbl = 'RAM',  val = vram,  txt = string.format('%d%%', vram) },
-    { icon = ICONS.bat,  lbl = 'Bat',   val = vbat,  txt = vbat and string.format('%d%%', vbat) or '--' },
+    { icon = charging and ICONS.bat_charging or ICONS.bat, lbl = 'Bat',   val = vbat,  txt = vbat and string.format('%d%%', vbat) or '--' },
     { icon = ICONS.temp, lbl = 'Temp',  val = vtemp, txt = vtemp and string.format('%d°C', vtemp) or '--' },
   }
   for i, g in ipairs(gauges) do
